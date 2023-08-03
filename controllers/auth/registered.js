@@ -1,9 +1,12 @@
 const { User } = require("../../models/user");
 const authSchemas = require("../../schemas/userAuthSchema");
-const { HttpError } = require("../../helpers");
+const { HttpError, sendEmail } = require("../../helpers");
 const bcrypt = require("bcrypt");
 const gravatar = require("gravatar");
-//const  createHashPassword  = require("../../helpers/hashPassword");
+const { nanoid } = require("nanoid");
+
+require("dotenv").config();
+const { SENDGRID_API_KEY, BASE_URL } = process.env;
 
 const registered = async (req, res, next) => {
   try {
@@ -11,7 +14,6 @@ const registered = async (req, res, next) => {
     const userEmail = await User.findOne({ email });
 
     if (userEmail) {
-      // return res.status(409).json({ message: "Email in use" });
       throw HttpError(409, "Email in use");
     }
 
@@ -22,8 +24,21 @@ const registered = async (req, res, next) => {
 
     const hashPassword = await bcrypt.hash(password, 10);
     const avatarURL = gravatar.url(email);
+    const verificationToken = nanoid();
 
-    const result = await User.create({ ...req.body, password: hashPassword , avatarURL});
+    const result = await User.create({
+      ...req.body,
+      password: hashPassword,
+      avatarURL,
+      verificationToken,
+    });
+    const verifyEmail = {
+      to: email,
+      subject: "Verify email",
+      html: `<a target="_blank" href="${BASE_URL}/users/verify/${verificationToken}">Click verify email</a>`,
+    };
+    await sendEmail(verifyEmail);
+
     res.status(201).json({
       email: result.email,
       password: result.password,
